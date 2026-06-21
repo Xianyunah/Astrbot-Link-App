@@ -2,6 +2,9 @@ package com.rainnya.chat.ui.chat
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewModelScope
 import com.rainnya.chat.data.repository.ChatRepository
 import com.rainnya.chat.data.repository.ConnectionState
@@ -17,7 +20,7 @@ data class ChatUiState(
     val inputText: String = "",
 )
 
-class ChatViewModel(application: Application) : AndroidViewModel(application) {
+class ChatViewModel(application: Application) : AndroidViewModel(application), LifecycleEventObserver {
     private val settings = AppSettings(application)
     val repository = ChatRepository(settings)
 
@@ -75,6 +78,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun reconnect() {
         if (settings.isConfigured) {
             repository.reconnect()
+        }
+    }
+
+    override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+        if (event == Lifecycle.Event.ON_RESUME) {
+            onResume()
         }
     }
 
