@@ -80,6 +80,15 @@ class ChatRepository(
         )
         val list = _messages.value.toMutableList()
         list.add(userMsg)
+        list.add(
+            ChatMessage(
+                id = "pending_$messageId",
+                content = "",
+                role = MessageRole.ASSISTANT,
+                sessionId = currentSessionId ?: "",
+                streaming = true,
+            )
+        )
         _messages.value = list
         saveCurrentMessages()
 
