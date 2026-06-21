@@ -66,7 +66,7 @@ fun AppNavigation(settings: AppSettings) {
     ) { padding ->
         when (selectedIndex) {
             0 -> ChatScreen(
-                bottomBarHeight = padding.calculateBottomPadding(),
+                scaffoldPadding = padding,
                 viewModel = chatViewModel,
             )
             1 -> SessionsScreen(

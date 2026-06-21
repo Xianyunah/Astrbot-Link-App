@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,6 +32,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -40,9 +41,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rainnya.chat.data.repository.ConnectionState
@@ -53,11 +54,17 @@ import com.rainnya.chat.ui.theme.RainnyaTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    bottomBarHeight: Dp = 0.dp,
+    scaffoldPadding: PaddingValues = PaddingValues(0.dp),
     viewModel: ChatViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+
+    val density = LocalDensity.current
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    val imeBottomDp = with(density) { imeBottomPx.toDp() }
+    val navBarDp = scaffoldPadding.calculateBottomPadding()
+    val bottomDp = maxOf(imeBottomDp, navBarDp)
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
@@ -70,8 +77,8 @@ fun ChatScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .imePadding()
-            .padding(bottom = bottomBarHeight)
+            .padding(top = scaffoldPadding.calculateTopPadding())
+            .padding(bottom = bottomDp)
     ) {
         TopAppBar(
             title = {
