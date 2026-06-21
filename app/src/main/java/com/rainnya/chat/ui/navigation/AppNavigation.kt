@@ -1,6 +1,5 @@
 package com.rainnya.chat.ui.navigation
 
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
@@ -47,7 +46,6 @@ fun AppNavigation(settings: AppSettings) {
     val repository = chatViewModel.repository
 
     Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             NavigationBar {
                 navItems.forEachIndexed { index, item ->

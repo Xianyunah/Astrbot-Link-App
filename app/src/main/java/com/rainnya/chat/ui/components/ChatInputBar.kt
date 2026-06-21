@@ -3,11 +3,10 @@ package com.rainnya.chat.ui.components
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -50,16 +49,19 @@ fun ChatInputBar(
             disabledPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
         ),
         trailingIcon = {
-            FilledTonalButton(
+            IconButton(
                 onClick = onSend,
                 enabled = enabled && text.isNotBlank(),
-                shape = CircleShape,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(48.dp),
             ) {
                 Icon(
                     imageVector = Icons.Filled.Send,
                     contentDescription = "发送",
-                    modifier = Modifier.size(18.dp),
+                    tint = if (enabled && text.isNotBlank())
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    modifier = Modifier.size(24.dp),
                 )
             }
         },

@@ -67,7 +67,7 @@ class ChatRepository(
         Log.d(TAG, "Sending message id=$messageId text=$text")
 
         val userMsg = ChatMessage(
-            id = messageId,
+            id = "user_$messageId",
             content = text,
             role = MessageRole.USER,
             sessionId = currentSessionId ?: "",
@@ -137,7 +137,7 @@ class ChatRepository(
                     } else {
                         currentList.add(
                             ChatMessage(
-                                id = msg.message_id ?: UUID.randomUUID().toString(),
+                                id = UUID.randomUUID().toString(),
                                 content = text,
                                 role = MessageRole.ASSISTANT,
                                 sessionId = currentSessionId ?: "",
