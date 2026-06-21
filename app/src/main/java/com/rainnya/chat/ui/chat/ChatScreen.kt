@@ -1,5 +1,7 @@
 package com.rainnya.chat.ui.chat
 
+import android.graphics.Rect
+import android.view.ViewTreeObserver
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -33,9 +35,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -61,9 +66,23 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val navBarDp = scaffoldPadding.calculateBottomPadding()
     val density = LocalDensity.current
-    val imePx = WindowInsets.ime.getBottom(density)
-    val imeDp = with(density) { imePx.toDp() }
-    val bottomDp = if (imeDp > 0.dp) imeDp else navBarDp
+    val view = LocalView.current
+    val imeHeightDp = remember { mutableStateOf(0.dp) }
+
+    DisposableEffect(view) {
+        val listener = ViewTreeObserver.OnGlobalLayoutListener {
+            val rect = Rect()
+            view.getWindowVisibleDisplayFrame(rect)
+            val screenHeight = view.rootView.height
+            val visibleHeight = rect.bottom - rect.top
+            val keyboardPx = (screenHeight - visibleHeight).coerceAtLeast(0)
+            imeHeightDp.value = with(density) { keyboardPx.toDp() }
+        }
+        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
+    }
+
+    val bottomDp = if (imeHeightDp.value > 0.dp) imeHeightDp.value else navBarDp
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
