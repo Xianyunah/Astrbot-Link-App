@@ -65,7 +65,8 @@ fun ChatInputBar(
                 )
             }
         },
-        singleLine = true,
+        minLines = 1,
+        maxLines = 5,
     )
 }
 
