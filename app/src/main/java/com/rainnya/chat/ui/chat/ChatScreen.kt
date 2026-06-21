@@ -67,22 +67,25 @@ fun ChatScreen(
     val navBarDp = scaffoldPadding.calculateBottomPadding()
     val density = LocalDensity.current
     val view = LocalView.current
-    val imeHeightDp = remember { mutableStateOf(0.dp) }
+    val overrideBottomDp = remember { mutableStateOf<Dp?>(null) }
 
     DisposableEffect(view) {
         val listener = ViewTreeObserver.OnGlobalLayoutListener {
             val rect = Rect()
             view.getWindowVisibleDisplayFrame(rect)
-            val screenHeight = view.rootView.height
-            val visibleHeight = rect.bottom - rect.top
-            val keyboardPx = (screenHeight - visibleHeight).coerceAtLeast(0)
-            imeHeightDp.value = with(density) { keyboardPx.toDp() }
+            val navBarPx = with(density) { navBarDp.toPx() }.toInt()
+            val rootHeight = view.rootView.height
+            val keyboardOnly = (rootHeight - rect.bottom - navBarPx).coerceAtLeast(0)
+            overrideBottomDp.value = if (keyboardOnly > 0)
+                with(density) { keyboardOnly.toDp() }
+            else
+                null
         }
         view.viewTreeObserver.addOnGlobalLayoutListener(listener)
         onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
     }
 
-    val bottomDp = if (imeHeightDp.value > 0.dp) imeHeightDp.value else navBarDp
+    val bottomDp = overrideBottomDp.value ?: navBarDp
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
