@@ -92,7 +92,8 @@ fun ChatScreen(
         modifier = Modifier
             .fillMaxSize()
             .imePadding()
-            .let { if (!isImeVisible) it.padding(bottom = navBarDp) else it }
+            .padding(bottom = navBarDp)
+            .let { if (isImeVisible) it.offset(y = navBarDp) else it }
     ) {
         TopAppBar(
             title = {
