@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -42,7 +43,6 @@ import com.rainnya.chat.ui.theme.RainnyaTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
-    modifier: Modifier = Modifier,
     bottomBarHeight: Dp = 0.dp,
     viewModel: ChatViewModel = viewModel(),
 ) {
@@ -58,18 +58,34 @@ fun ChatScreen(
     val density = LocalDensity.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
     val imeBottomDp = with(density) { imeBottomPx.toDp() }
-    val effectiveBottomPad = if (imeBottomDp > 0.dp)
-        imeBottomDp
-    else
-        bottomBarHeight
+    val effectiveBottomPad = if (imeBottomDp > 0.dp) imeBottomDp else bottomBarHeight
+    val currentSession = viewModel.repository.currentSession()
 
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
             .padding(bottom = effectiveBottomPad)
     ) {
         TopAppBar(
-            title = { Text("Rainnya") },
+            title = {
+                Column {
+                    Text(
+                        text = currentSession?.displayName ?: "Rainnya",
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    currentSession?.let { s ->
+                        Text(
+                            text = s.sessionId.take(8),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.surface,
                 titleContentColor = MaterialTheme.colorScheme.onSurface,

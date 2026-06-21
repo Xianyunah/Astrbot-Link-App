@@ -66,7 +66,6 @@ fun AppNavigation(settings: AppSettings) {
     ) { padding ->
         when (selectedIndex) {
             0 -> ChatScreen(
-                modifier = Modifier.padding(top = padding.calculateTopPadding()),
                 bottomBarHeight = padding.calculateBottomPadding(),
                 viewModel = chatViewModel,
             )

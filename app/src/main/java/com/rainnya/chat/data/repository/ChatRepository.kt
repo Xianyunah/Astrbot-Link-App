@@ -39,6 +39,7 @@ class ChatRepository(
     val connectionState: StateFlow<ConnectionState> = _connectionState
 
     private var currentSessionId: String? = null
+    private val sessionMessages = mutableMapOf<String, MutableList<ChatMessage>>()
 
     val wsEvents: Flow<WsEvent> = wsClient.events
 
@@ -72,7 +73,10 @@ class ChatRepository(
             role = MessageRole.USER,
             sessionId = currentSessionId ?: "",
         )
-        _messages.value = _messages.value + userMsg
+        val list = _messages.value.toMutableList()
+        list.add(userMsg)
+        _messages.value = list
+        saveCurrentMessages()
 
         wsClient.sendMessage(
             text = text,
@@ -107,7 +111,7 @@ class ChatRepository(
     private fun handleMessage(event: WsEvent.MessageReceived) {
         try {
             val msg = event.msg
-            Log.d(TAG, "Handle message type=${msg.type} streaming=${msg.streaming}")
+            Log.d(TAG, "Handle message type=${msg.type}")
 
             when (msg.type) {
                 "session_id" -> {
@@ -126,16 +130,16 @@ class ChatRepository(
                     val text = msg.data?.toString() ?: ""
                     if (text.isEmpty()) return
                     val isStreaming = msg.streaming ?: true
-                    val currentList = _messages.value.toMutableList()
-                    val lastAssistant = currentList.indexOfLast { it.role == MessageRole.ASSISTANT }
+                    val list = _messages.value.toMutableList()
+                    val lastAssistant = list.indexOfLast { it.role == MessageRole.ASSISTANT }
 
-                    if (isStreaming && lastAssistant >= 0 && currentList[lastAssistant].streaming) {
-                        currentList[lastAssistant] = currentList[lastAssistant].copy(
-                            content = currentList[lastAssistant].content + text
+                    if (isStreaming && lastAssistant >= 0 && list[lastAssistant].streaming) {
+                        list[lastAssistant] = list[lastAssistant].copy(
+                            content = list[lastAssistant].content + text
                         )
-                        _messages.value = currentList
+                        _messages.value = list
                     } else {
-                        currentList.add(
+                        list.add(
                             ChatMessage(
                                 id = UUID.randomUUID().toString(),
                                 content = text,
@@ -144,26 +148,31 @@ class ChatRepository(
                                 streaming = isStreaming,
                             )
                         )
-                        _messages.value = currentList
+                        _messages.value = list
                     }
                 }
                 "end" -> {
-                    val currentList = _messages.value.toMutableList()
-                    val lastAssistant = currentList.indexOfLast { it.role == MessageRole.ASSISTANT }
+                    val list = _messages.value.toMutableList()
+                    val lastAssistant = list.indexOfLast { it.role == MessageRole.ASSISTANT }
                     if (lastAssistant >= 0) {
-                        currentList[lastAssistant] = currentList[lastAssistant].copy(streaming = false)
-                        _messages.value = currentList
+                        list[lastAssistant] = list[lastAssistant].copy(streaming = false)
+                        _messages.value = list
                     }
+                    saveCurrentMessages()
                 }
                 "error" -> {
                     val errText = msg.data?.toString() ?: msg.code ?: "Unknown error"
                     Log.e(TAG, "Server error: $errText")
-                    _messages.value = _messages.value + ChatMessage(
-                        id = UUID.randomUUID().toString(),
-                        content = "Error: $errText",
-                        role = MessageRole.SYSTEM,
-                        sessionId = currentSessionId ?: "",
+                    val list = _messages.value.toMutableList()
+                    list.add(
+                        ChatMessage(
+                            id = UUID.randomUUID().toString(),
+                            content = "Error: $errText",
+                            role = MessageRole.SYSTEM,
+                            sessionId = currentSessionId ?: "",
+                        )
                     )
+                    _messages.value = list
                 }
                 "message_saved" -> Log.d(TAG, "Message saved: ${msg.data}")
                 "agent_stats" -> Log.d(TAG, "Agent stats: ${msg.data}")
@@ -174,16 +183,28 @@ class ChatRepository(
         }
     }
 
+    private fun saveCurrentMessages() {
+        val sid = currentSessionId ?: return
+        sessionMessages[sid] = _messages.value.toMutableList()
+    }
+
     fun switchSession(sessionId: String) {
         Log.d(TAG, "Switch to session $sessionId")
+        saveCurrentMessages()
         currentSessionId = sessionId
-        _messages.value = emptyList()
+        _messages.value = sessionMessages[sessionId]?.toList() ?: emptyList()
     }
 
     fun newSession() {
         Log.d(TAG, "New session")
+        saveCurrentMessages()
         currentSessionId = null
         _messages.value = emptyList()
+    }
+
+    fun currentSession(): ChatSession? {
+        val sid = currentSessionId ?: return null
+        return _sessions.value.find { it.sessionId == sid }
     }
 
     suspend fun testConnection(): String = withContext(Dispatchers.IO) {
