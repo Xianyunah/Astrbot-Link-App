@@ -58,7 +58,12 @@ fun SessionsScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("会话") },
+            title = {
+                Text(
+                    "会话",
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+            },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.surface,
             ),

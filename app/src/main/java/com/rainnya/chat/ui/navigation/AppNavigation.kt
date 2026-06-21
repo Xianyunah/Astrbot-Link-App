@@ -75,12 +75,12 @@ fun AppNavigation(settings: AppSettings) {
                     chatViewModel.switchSession(sessionId)
                     selectedIndex = 0
                 },
-                modifier = Modifier.padding(padding),
+                modifier = Modifier.padding(bottom = padding.calculateBottomPadding()),
             )
             2 -> SettingsScreen(
                 settings = settings,
                 repository = repository,
-                modifier = Modifier.padding(padding),
+                modifier = Modifier.padding(bottom = padding.calculateBottomPadding()),
             )
         }
     }

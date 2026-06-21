@@ -59,7 +59,12 @@ fun SettingsScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("设置") },
+            title = {
+                Text(
+                    "设置",
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+            },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.surface,
             ),
