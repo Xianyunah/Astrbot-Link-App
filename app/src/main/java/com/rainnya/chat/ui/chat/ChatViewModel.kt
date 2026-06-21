@@ -3,7 +3,6 @@ package com.rainnya.chat.ui.chat
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.rainnya.chat.data.model.ChatSession
 import com.rainnya.chat.data.repository.ChatRepository
 import com.rainnya.chat.data.repository.ConnectionState
 import com.rainnya.chat.data.settings.AppSettings
@@ -46,6 +45,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun onResume() {
+        val state = _uiState.value.connectionState
+        if (state == ConnectionState.DISCONNECTED || state == ConnectionState.ERROR) {
+            if (settings.isConfigured) {
+                repository.reconnect()
+            }
+        }
+    }
+
     fun sendMessage(text: String) {
         if (text.isBlank()) return
         repository.sendMessage(text.trim())
@@ -64,18 +72,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         repository.switchSession(sessionId)
     }
 
-    fun connect() {
-        repository.connect()
-    }
-
-    fun disconnect() {
-        repository.disconnect()
-    }
-
-    fun testConnection(onResult: (String) -> Unit) {
-        viewModelScope.launch {
-            val result = repository.testConnection()
-            onResult(result)
+    fun reconnect() {
+        if (settings.isConfigured) {
+            repository.reconnect()
         }
     }
 

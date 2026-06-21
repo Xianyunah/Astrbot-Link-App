@@ -7,9 +7,7 @@ import com.rainnya.chat.data.model.WsIncomingMessage
 import com.rainnya.chat.data.model.WsOutgoingMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -39,25 +37,11 @@ class AstrBotWsClient(
         .build()
 
     private var webSocket: WebSocket? = null
-    private var wsUrl: String = ""
-    private var apiKey: String = ""
     private val scope = CoroutineScope(Dispatchers.IO)
-    private var reconnectJob: Job? = null
-    private var retryCount = 0
-    private var shouldReconnect = true
-
     private val _events = Channel<WsEvent>(Channel.BUFFERED)
     val events: Flow<WsEvent> = _events.receiveAsFlow()
 
     fun connect(wsUrl: String, apiKey: String) {
-        this.wsUrl = wsUrl
-        this.apiKey = apiKey
-        this.shouldReconnect = true
-        this.retryCount = 0
-        doConnect()
-    }
-
-    private fun doConnect() {
         Log.d(TAG, "Connecting to $wsUrl")
         val request = Request.Builder()
             .url("$wsUrl?api_key=$apiKey")
@@ -66,8 +50,6 @@ class AstrBotWsClient(
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(TAG, "WebSocket opened")
-                retryCount = 0
-                reconnectJob?.cancel()
                 scope.launch { _events.send(WsEvent.Connected(null)) }
             }
 
@@ -75,7 +57,6 @@ class AstrBotWsClient(
                 try {
                     val json = gson.fromJson(text, JsonObject::class.java)
                     val type = json.get("type")?.asString ?: ""
-                    Log.d(TAG, "WS receive type=$type")
 
                     if (type == "pong") return
 
@@ -98,36 +79,20 @@ class AstrBotWsClient(
                     )
                     scope.launch { _events.send(WsEvent.MessageReceived(msg)) }
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to parse WS message: ${e.message}", e)
+                    Log.e(TAG, "Failed to parse WS message", e)
                 }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 Log.d(TAG, "WebSocket closed: $code $reason")
                 scope.launch { _events.send(WsEvent.Disconnected(reason)) }
-                scheduleReconnect()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 Log.e(TAG, "WebSocket failure: ${t.message}", t)
                 scope.launch { _events.send(WsEvent.Error(t.message ?: "Unknown error")) }
-                scheduleReconnect()
             }
         })
-    }
-
-    private fun scheduleReconnect() {
-        if (!shouldReconnect) return
-        retryCount++
-        val delayMs = listOf(1000L, 2000L, 4000L, 8000L, 15000L, 30000L)
-            .getOrElse(retryCount - 1) { 30000L }
-        Log.d(TAG, "Reconnect in ${delayMs}ms (attempt $retryCount)")
-        reconnectJob = scope.launch {
-            delay(delayMs)
-            if (shouldReconnect && wsUrl.isNotBlank()) {
-                doConnect()
-            }
-        }
     }
 
     fun sendMessage(
@@ -142,15 +107,11 @@ class AstrBotWsClient(
             session_id = sessionId,
             message_id = messageId,
         )
-        val json = gson.toJson(msg)
-        Log.d(TAG, "WS send: $json")
-        webSocket?.send(json)
+        webSocket?.send(gson.toJson(msg))
     }
 
     fun disconnect() {
         Log.d(TAG, "Disconnecting WebSocket")
-        shouldReconnect = false
-        reconnectJob?.cancel()
         webSocket?.close(1000, "Client closing")
         webSocket = null
     }

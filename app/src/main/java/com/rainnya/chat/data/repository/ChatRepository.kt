@@ -53,6 +53,11 @@ class ChatRepository(
         wsClient.connect(settings.wsUrl, settings.apiKey)
     }
 
+    fun reconnect() {
+        disconnect()
+        connect()
+    }
+
     fun disconnect() {
         Log.d(TAG, "Disconnecting...")
         wsClient.disconnect()
