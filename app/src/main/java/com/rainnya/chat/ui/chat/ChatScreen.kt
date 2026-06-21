@@ -33,13 +33,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,7 +51,7 @@ import com.rainnya.chat.ui.components.ChatInputBar
 import com.rainnya.chat.ui.components.MessageBubble
 import com.rainnya.chat.ui.theme.RainnyaTheme
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatScreen(
     scaffoldPadding: PaddingValues = PaddingValues(0.dp),
@@ -60,6 +60,10 @@ fun ChatScreen(
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val navBarDp = scaffoldPadding.calculateBottomPadding()
+    val density = LocalDensity.current
+    val imePx = WindowInsets.ime.getBottom(density)
+    val imeDp = with(density) { imePx.toDp() }
+    val bottomDp = if (imeDp > 0.dp) imeDp else navBarDp
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
@@ -72,9 +76,7 @@ fun ChatScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .imePadding()
-            .padding(top = scaffoldPadding.calculateTopPadding())
-            .padding(bottom = navBarDp)
+            .padding(bottom = bottomDp)
     ) {
         TopAppBar(
             title = {
