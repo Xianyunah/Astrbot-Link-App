@@ -3,6 +3,7 @@ package com.rainnya.chat.ui.chat
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.rainnya.chat.data.model.ChatSession
 import com.rainnya.chat.data.repository.ChatRepository
 import com.rainnya.chat.data.repository.ConnectionState
 import com.rainnya.chat.data.settings.AppSettings
@@ -59,12 +60,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         repository.newSession()
     }
 
+    fun switchSession(sessionId: String) {
+        repository.switchSession(sessionId)
+    }
+
     fun connect() {
         repository.connect()
     }
 
     fun disconnect() {
         repository.disconnect()
+    }
+
+    fun testConnection(onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val result = repository.testConnection()
+            onResult(result)
+        }
     }
 
     override fun onCleared() {

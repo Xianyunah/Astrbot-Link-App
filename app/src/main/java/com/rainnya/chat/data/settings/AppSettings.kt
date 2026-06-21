@@ -19,6 +19,12 @@ class AppSettings(context: Context) {
         get() = prefs.getString(KEY_USERNAME, DEFAULT_USERNAME) ?: DEFAULT_USERNAME
         set(value) = prefs.edit().putString(KEY_USERNAME, value).apply()
 
+    val taggedUsername: String
+        get() {
+            val raw = username.trim()
+            return if (raw.startsWith("app_")) raw else "app_$raw"
+        }
+
     val wsUrl: String
         get() {
             val base = serverUrl.trimEnd('/')
@@ -28,6 +34,9 @@ class AppSettings(context: Context) {
                 base.replace("http://", "ws://") + "/api/v1/chat/ws"
             }
         }
+
+    val httpBaseUrl: String
+        get() = serverUrl.trimEnd('/')
 
     val isConfigured: Boolean
         get() = apiKey.isNotBlank() && serverUrl.isNotBlank()

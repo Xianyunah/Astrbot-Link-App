@@ -15,9 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.rainnya.chat.data.model.ChatMessage
 import com.rainnya.chat.data.model.MessageRole
+import com.rainnya.chat.ui.theme.RainnyaTheme
 
 @Composable
 fun MessageBubble(message: ChatMessage, modifier: Modifier = Modifier) {
@@ -74,5 +76,33 @@ fun MessageBubble(message: ChatMessage, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodyLarge,
             )
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun MessageBubbleUserPreview() {
+    RainnyaTheme {
+        MessageBubble(
+            message = ChatMessage(
+                id = "1",
+                content = "你好，今天天气怎么样？",
+                role = MessageRole.USER,
+            )
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun MessageBubbleAssistantPreview() {
+    RainnyaTheme {
+        MessageBubble(
+            message = ChatMessage(
+                id = "2",
+                content = "今天天气很好，适合出门散步。",
+                role = MessageRole.ASSISTANT,
+            )
+        )
     }
 }

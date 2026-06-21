@@ -7,15 +7,25 @@ import com.rainnya.chat.data.model.ChatSession
 import com.rainnya.chat.data.settings.AppSettings
 import com.rainnya.chat.data.websocket.AstrBotWsClient
 import com.rainnya.chat.data.websocket.WsEvent
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 class ChatRepository(
     private val settings: AppSettings,
     private val wsClient: AstrBotWsClient = AstrBotWsClient(Gson()),
 ) {
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .build()
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages
 
@@ -26,7 +36,6 @@ class ChatRepository(
     val connectionState: StateFlow<ConnectionState> = _connectionState
 
     private var currentSessionId: String? = null
-    private var currentMessageId: String? = null
 
     val wsEvents: Flow<WsEvent> = wsClient.events
 
@@ -42,8 +51,8 @@ class ChatRepository(
     }
 
     fun sendMessage(text: String) {
+        if (_connectionState.value != ConnectionState.CONNECTED) return
         val messageId = UUID.randomUUID().toString()
-        currentMessageId = messageId
 
         val userMsg = ChatMessage(
             id = messageId,
@@ -55,7 +64,7 @@ class ChatRepository(
 
         wsClient.sendMessage(
             text = text,
-            username = settings.username,
+            username = settings.taggedUsername,
             sessionId = currentSessionId,
             messageId = messageId,
         )
@@ -82,6 +91,13 @@ class ChatRepository(
             "session_id" -> {
                 msg.session_id?.let { sid ->
                     currentSessionId = sid
+                    val existing = _sessions.value.any { it.sessionId == sid }
+                    if (!existing) {
+                        _sessions.value = _sessions.value + ChatSession(
+                            sessionId = sid,
+                            displayName = "会话 ${_sessions.value.size + 1}",
+                        )
+                    }
                 }
             }
             "plain" -> {
@@ -128,6 +144,11 @@ class ChatRepository(
         }
     }
 
+    fun switchSession(sessionId: String) {
+        currentSessionId = sessionId
+        _messages.value = emptyList()
+    }
+
     fun newSession() {
         currentSessionId = null
         _messages.value = emptyList()
@@ -135,6 +156,30 @@ class ChatRepository(
 
     fun clearMessages() {
         _messages.value = emptyList()
+    }
+
+    suspend fun testConnection(): String = withContext(Dispatchers.IO) {
+        if (!settings.isConfigured) return@withContext "请先填写服务器地址和 API Key"
+        try {
+            val request = Request.Builder()
+                .url("${settings.httpBaseUrl}/api/v1/chat/sessions?page=1&page_size=1")
+                .header("Authorization", "Bearer ${settings.apiKey}")
+                .build()
+            val response = httpClient.newCall(request).execute()
+            when (response.code) {
+                200 -> "连接成功 ✓"
+                401 -> "连接失败：API Key 无效"
+                403 -> "连接失败：权限不足"
+                404 -> "连接失败：接口路径错误"
+                else -> "连接失败：HTTP ${response.code}"
+            }
+        } catch (e: java.net.ConnectException) {
+            "连接失败：无法连接到服务器"
+        } catch (e: java.net.SocketTimeoutException) {
+            "连接失败：连接超时"
+        } catch (e: Exception) {
+            "连接失败：${e.localizedMessage ?: "未知错误"}"
+        }
     }
 }
 
