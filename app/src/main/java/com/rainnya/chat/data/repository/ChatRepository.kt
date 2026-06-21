@@ -207,6 +207,23 @@ class ChatRepository(
         return _sessions.value.find { it.sessionId == sid }
     }
 
+    fun renameSession(sessionId: String, newName: String) {
+        Log.d(TAG, "Rename session $sessionId -> $newName")
+        _sessions.value = _sessions.value.map {
+            if (it.sessionId == sessionId) it.copy(displayName = newName) else it
+        }
+    }
+
+    fun deleteSession(sessionId: String) {
+        Log.d(TAG, "Delete session $sessionId")
+        _sessions.value = _sessions.value.filter { it.sessionId != sessionId }
+        sessionMessages.remove(sessionId)
+        if (currentSessionId == sessionId) {
+            currentSessionId = null
+            _messages.value = emptyList()
+        }
+    }
+
     suspend fun testConnection(): String = withContext(Dispatchers.IO) {
         if (!settings.isConfigured) return@withContext "请先填写服务器地址和 API Key"
         try {
