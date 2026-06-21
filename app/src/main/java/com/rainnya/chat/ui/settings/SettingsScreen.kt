@@ -57,7 +57,7 @@ fun SettingsScreen(
     var testing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    Column(modifier = modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("设置") },
             colors = TopAppBarDefaults.topAppBarColors(

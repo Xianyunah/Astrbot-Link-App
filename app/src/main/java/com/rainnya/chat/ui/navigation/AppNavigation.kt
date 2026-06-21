@@ -1,10 +1,6 @@
 package com.rainnya.chat.ui.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Forum
@@ -15,6 +11,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,43 +45,44 @@ fun AppNavigation(settings: AppSettings) {
     val chatViewModel: ChatViewModel = viewModel()
     val repository = chatViewModel.repository
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.weight(1f).imePadding()) {
-            when (selectedIndex) {
-                0 -> ChatScreen(
-                    modifier = Modifier.fillMaxSize(),
-                    viewModel = chatViewModel,
-                )
-                1 -> SessionsScreen(
-                    repository = repository,
-                    onSessionClick = { sessionId ->
-                        chatViewModel.switchSession(sessionId)
-                        selectedIndex = 0
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-                2 -> SettingsScreen(
-                    settings = settings,
-                    repository = repository,
-                    modifier = Modifier.fillMaxSize(),
-                )
+    Scaffold(
+        bottomBar = {
+            NavigationBar {
+                navItems.forEachIndexed { index, item ->
+                    NavigationBarItem(
+                        selected = selectedIndex == index,
+                        onClick = { selectedIndex = index },
+                        icon = {
+                            Icon(
+                                imageVector = if (selectedIndex == index) item.selectedIcon else item.unselectedIcon,
+                                contentDescription = item.label,
+                            )
+                        },
+                        label = { Text(item.label) },
+                    )
+                }
             }
-        }
-
-        NavigationBar {
-            navItems.forEachIndexed { index, item ->
-                NavigationBarItem(
-                    selected = selectedIndex == index,
-                    onClick = { selectedIndex = index },
-                    icon = {
-                        Icon(
-                            imageVector = if (selectedIndex == index) item.selectedIcon else item.unselectedIcon,
-                            contentDescription = item.label,
-                        )
-                    },
-                    label = { Text(item.label) },
-                )
-            }
+        },
+    ) { padding ->
+        when (selectedIndex) {
+            0 -> ChatScreen(
+                modifier = Modifier.padding(top = padding.calculateTopPadding()),
+                bottomBarHeight = padding.calculateBottomPadding(),
+                viewModel = chatViewModel,
+            )
+            1 -> SessionsScreen(
+                repository = repository,
+                onSessionClick = { sessionId ->
+                    chatViewModel.switchSession(sessionId)
+                    selectedIndex = 0
+                },
+                modifier = Modifier.padding(padding),
+            )
+            2 -> SettingsScreen(
+                settings = settings,
+                repository = repository,
+                modifier = Modifier.padding(padding),
+            )
         }
     }
 }

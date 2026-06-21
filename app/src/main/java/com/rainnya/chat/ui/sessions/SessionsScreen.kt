@@ -47,10 +47,7 @@ fun SessionsScreen(
     val sessions by repository.sessions.collectAsState()
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .statusBarsPadding()
-            .navigationBarsPadding()
+        modifier = modifier.fillMaxSize()
     ) {
         TopAppBar(
             title = { Text("会话") },
