@@ -70,8 +70,17 @@ fun ChatScreen(
         navBarDp
     }
 
+    val lastMsg = state.messages.lastOrNull()
+    val streamingContentLen = lastMsg?.let { if (it.streaming) it.content.length else null }
+
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
+            listState.animateScrollToItem(state.messages.size - 1)
+        }
+    }
+
+    LaunchedEffect(streamingContentLen) {
+        if (streamingContentLen != null && state.messages.isNotEmpty()) {
             listState.animateScrollToItem(state.messages.size - 1)
         }
     }
