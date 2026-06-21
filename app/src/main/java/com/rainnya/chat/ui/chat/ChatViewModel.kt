@@ -18,11 +18,14 @@ data class ChatUiState(
     val messages: List<com.rainnya.chat.data.model.ChatMessage> = emptyList(),
     val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
     val inputText: String = "",
-)
+) {
+    val isStreaming: Boolean
+        get() = messages.any { it.streaming }
+}
 
 class ChatViewModel(application: Application) : AndroidViewModel(application), LifecycleEventObserver {
     private val settings = AppSettings(application)
-    val repository = ChatRepository(settings)
+    val repository = ChatRepository(viewModelScope, application, settings)
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState

@@ -1,8 +1,12 @@
 package com.rainnya.chat.data.model
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "chat_sessions")
 data class ChatSession(
-    val sessionId: String,
+    @PrimaryKey val sessionId: String,
     val displayName: String = "",
-    val createdAt: String = "",
-    val updatedAt: String = "",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
 )

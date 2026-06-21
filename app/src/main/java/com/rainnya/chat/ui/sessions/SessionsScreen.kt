@@ -3,6 +3,7 @@ package com.rainnya.chat.ui.sessions
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,15 +35,21 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.rainnya.chat.data.repository.ChatRepository
 import com.rainnya.chat.data.settings.AppSettings
 import com.rainnya.chat.ui.theme.RainnyaTheme
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -99,62 +106,69 @@ fun SessionsScreen(
         } else {
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(sessions, key = { it.sessionId }) { session ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(
-                                onClick = { onSessionClick(session.sessionId) },
-                                onLongClick = {
-                                    menuSessionId = session.sessionId
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .combinedClickable(
+                                    onClick = { onSessionClick(session.sessionId) },
+                                    onLongClick = {
+                                        menuSessionId = session.sessionId
+                                        renameText = session.displayName
+                                    },
+                                )
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Chat,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = session.displayName.ifEmpty { session.sessionId.take(8) },
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = session.sessionId.take(8),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    text = formatTime(session.updatedAt),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                )
+                            }
+                        }
+
+                        DropdownMenu(
+                            expanded = menuSessionId == session.sessionId,
+                            onDismissRequest = { menuSessionId = null },
+                            offset = DpOffset(48.dp, 0.dp),
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("重命名") },
+                                onClick = {
+                                    menuSessionId = null
+                                    renameSessionId = session.sessionId
                                     renameText = session.displayName
                                 },
                             )
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Chat,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp),
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = session.displayName.ifEmpty { session.sessionId.take(8) },
-                                style = MaterialTheme.typography.bodyLarge,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = session.sessionId.take(8),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            DropdownMenuItem(
+                                text = { Text("删除", color = MaterialTheme.colorScheme.error) },
+                                onClick = {
+                                    menuSessionId = null
+                                    repository.deleteSession(session.sessionId)
+                                },
                             )
                         }
                     }
-
-                    DropdownMenu(
-                        expanded = menuSessionId == session.sessionId,
-                        onDismissRequest = { menuSessionId = null },
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("重命名") },
-                            onClick = {
-                                menuSessionId = null
-                                renameSessionId = session.sessionId
-                                renameText = session.displayName
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("删除", color = MaterialTheme.colorScheme.error) },
-                            onClick = {
-                                menuSessionId = null
-                                repository.deleteSession(session.sessionId)
-                            },
-                        )
-                    }
-
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
@@ -195,12 +209,27 @@ fun SessionsScreen(
     }
 }
 
+private fun formatTime(epochMillis: Long): String {
+    val now = System.currentTimeMillis()
+    val diff = now - epochMillis
+    val sdf = if (diff < 86400000L) {
+        SimpleDateFormat("HH:mm", Locale.getDefault())
+    } else if (diff < 604800000L) {
+        SimpleDateFormat("EEE HH:mm", Locale.getDefault())
+    } else {
+        SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
+    }
+    return sdf.format(Date(epochMillis))
+}
+
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun SessionsScreenPreview() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     RainnyaTheme {
         SessionsScreen(
-            repository = ChatRepository(AppSettings(androidx.compose.ui.platform.LocalContext.current)),
+            repository = ChatRepository(scope, context, AppSettings(context)),
             onSessionClick = {},
         )
     }

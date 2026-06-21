@@ -1,26 +1,36 @@
 package com.rainnya.chat.data.repository
 
+import android.content.Context
 import android.util.Log
 import com.google.gson.Gson
+import com.rainnya.chat.data.local.AppDatabase
 import com.rainnya.chat.data.model.ChatMessage
 import com.rainnya.chat.data.model.MessageRole
 import com.rainnya.chat.data.model.ChatSession
 import com.rainnya.chat.data.settings.AppSettings
 import com.rainnya.chat.data.websocket.AstrBotWsClient
 import com.rainnya.chat.data.websocket.WsEvent
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "RainnyaRepo"
 
 class ChatRepository(
+    private val scope: CoroutineScope,
+    private val context: Context,
     private val settings: AppSettings,
     private val wsClient: AstrBotWsClient = AstrBotWsClient(Gson()),
 ) {
@@ -28,6 +38,9 @@ class ChatRepository(
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.SECONDS)
         .build()
+
+    private val db = AppDatabase.getInstance(context)
+    private val dao = db.chatDao()
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages
@@ -40,8 +53,34 @@ class ChatRepository(
 
     private var currentSessionId: String? = null
     private val sessionMessages = mutableMapOf<String, MutableList<ChatMessage>>()
+    private var streamTimeoutJob: Job? = null
 
     val wsEvents: Flow<WsEvent> = wsClient.events
+
+    init {
+        scope.launch(Dispatchers.IO) {
+            loadFromDatabase()
+        }
+    }
+
+    private suspend fun loadFromDatabase() {
+        try {
+            val sessions = dao.getAllSessions()
+            _sessions.value = sessions
+            for (session in sessions) {
+                val msgs = dao.getMessagesForSession(session.sessionId)
+                sessionMessages[session.sessionId] = msgs.toMutableList()
+            }
+            val latest = sessions.maxByOrNull { it.updatedAt }
+            if (latest != null) {
+                currentSessionId = latest.sessionId
+                _messages.value = sessionMessages[latest.sessionId]?.toList() ?: emptyList()
+                Log.d(TAG, "Loaded latest session: ${latest.sessionId}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load from database", e)
+        }
+    }
 
     fun connect() {
         if (!settings.isConfigured) {
@@ -69,6 +108,7 @@ class ChatRepository(
             Log.w(TAG, "Cannot send: not connected")
             return
         }
+        ensureSessionExists()
         val messageId = UUID.randomUUID().toString()
         Log.d(TAG, "Sending message id=$messageId text=$text")
 
@@ -92,10 +132,11 @@ class ChatRepository(
         _messages.value = list
         saveCurrentMessages()
 
+        val sendSessionId = if (currentSessionId?.startsWith("local_") == true) null else currentSessionId
         wsClient.sendMessage(
-            text = text,
+            message = text,
             username = settings.taggedUsername,
-            sessionId = currentSessionId,
+            sessionId = sendSessionId,
             messageId = messageId,
         )
     }
@@ -110,10 +151,12 @@ class ChatRepository(
                 is WsEvent.Disconnected -> {
                     Log.d(TAG, "Event: Disconnected")
                     _connectionState.value = ConnectionState.DISCONNECTED
+                    markPendingStreamAsFailed()
                 }
                 is WsEvent.Error -> {
                     Log.e(TAG, "Event: Error ${event.error}")
                     _connectionState.value = ConnectionState.ERROR
+                    markPendingStreamAsFailed()
                 }
                 is WsEvent.MessageReceived -> handleMessage(event)
             }
@@ -130,13 +173,41 @@ class ChatRepository(
             when (msg.type) {
                 "session_id" -> {
                     msg.session_id?.let { sid ->
+                        val prevId = currentSessionId
                         currentSessionId = sid
                         val existing = _sessions.value.any { it.sessionId == sid }
                         if (!existing) {
-                            _sessions.value = _sessions.value + ChatSession(
+                            val prevSession = prevId?.let { id ->
+                                _sessions.value.find { it.sessionId == id }
+                            }
+                            val displayName = prevSession?.displayName
+                                ?: "会话 ${_sessions.value.size + 1}"
+                            val createdAt = prevSession?.createdAt
+                                ?: System.currentTimeMillis()
+                            val session = ChatSession(
                                 sessionId = sid,
-                                displayName = "会话 ${_sessions.value.size + 1}",
+                                displayName = displayName,
+                                createdAt = createdAt,
                             )
+                            _sessions.value = _sessions.value.map {
+                                if (it.sessionId == prevId) session else it
+                            }
+                            sessionMessages.remove(prevId)
+                            sessionMessages[sid] = _messages.value.toMutableList()
+                            runBlocking(Dispatchers.IO) {
+                                try {
+                                    if (prevId != null) {
+                                        dao.deleteMessagesForSession(prevId)
+                                        dao.deleteSession(prevId)
+                                    }
+                                    dao.insertSession(session)
+                                    val msgs = _messages.value
+                                    dao.deleteMessagesForSession(sid)
+                                    dao.insertMessages(msgs)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Failed to migrate session", e)
+                                }
+                            }
                         }
                     }
                 }
@@ -144,6 +215,13 @@ class ChatRepository(
                     val text = msg.data?.toString() ?: ""
                     if (text.isEmpty()) return
                     val isStreaming = msg.streaming ?: true
+                    val trimmed = text.trimStart()
+
+                    if (trimmed.startsWith("{") && trimmed.contains("chatcmpl-tool-")) {
+                        if (isStreaming) resetStreamTimeout()
+                        return
+                    }
+
                     val list = _messages.value.toMutableList()
                     val lastAssistant = list.indexOfLast { it.role == MessageRole.ASSISTANT }
 
@@ -152,6 +230,7 @@ class ChatRepository(
                             content = list[lastAssistant].content + text
                         )
                         _messages.value = list
+                        resetStreamTimeout()
                     } else {
                         list.add(
                             ChatMessage(
@@ -166,6 +245,7 @@ class ChatRepository(
                     }
                 }
                 "end" -> {
+                    streamTimeoutJob?.cancel()
                     val list = _messages.value.toMutableList()
                     val lastAssistant = list.indexOfLast { it.role == MessageRole.ASSISTANT }
                     if (lastAssistant >= 0) {
@@ -197,9 +277,62 @@ class ChatRepository(
         }
     }
 
+    private fun resetStreamTimeout() {
+        streamTimeoutJob?.cancel()
+        streamTimeoutJob = scope.launch {
+            delay(30_000L)
+            val list = _messages.value.toMutableList()
+            val lastAssistant = list.indexOfLast { it.role == MessageRole.ASSISTANT }
+            if (lastAssistant >= 0 && list[lastAssistant].streaming) {
+                list[lastAssistant] = list[lastAssistant].copy(streaming = false)
+                _messages.value = list
+                saveCurrentMessages()
+                Log.d(TAG, "Stream timed out after 30s, ended streaming")
+            }
+        }
+    }
+
     private fun saveCurrentMessages() {
         val sid = currentSessionId ?: return
         sessionMessages[sid] = _messages.value.toMutableList()
+        runBlocking(Dispatchers.IO) {
+            try {
+                dao.deleteMessagesForSession(sid)
+                dao.insertMessages(_messages.value)
+                dao.updateSessionTimestamp(sid, System.currentTimeMillis())
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save messages to database", e)
+            }
+        }
+        updateLocalSessionTimestamp(sid)
+    }
+
+    private fun markPendingStreamAsFailed() {
+        streamTimeoutJob?.cancel()
+        val list = _messages.value.toMutableList()
+        var changed = false
+        for (i in list.indices) {
+            if (list[i].role == MessageRole.ASSISTANT && list[i].streaming) {
+                val msg = list[i]
+                val newContent = if (msg.content.isEmpty()) {
+                    "消息传输失败，请重试"
+                } else {
+                    "${msg.content}\n\n—— 消息传输失败，请重试"
+                }
+                list[i] = msg.copy(content = newContent, streaming = false)
+                changed = true
+            }
+        }
+        if (changed) {
+            _messages.value = list
+            saveCurrentMessages()
+        }
+    }
+
+    private fun updateLocalSessionTimestamp(sessionId: String) {
+        _sessions.value = _sessions.value.map {
+            if (it.sessionId == sessionId) it.copy(updatedAt = System.currentTimeMillis()) else it
+        }
     }
 
     fun switchSession(sessionId: String) {
@@ -209,10 +342,28 @@ class ChatRepository(
         _messages.value = sessionMessages[sessionId]?.toList() ?: emptyList()
     }
 
+    private fun ensureSessionExists() {
+        if (currentSessionId == null) {
+            Log.d(TAG, "No active session, auto-creating one")
+            newSession()
+        }
+    }
+
     fun newSession() {
         Log.d(TAG, "New session")
         saveCurrentMessages()
-        currentSessionId = null
+        val placeholderId = "local_${UUID.randomUUID().toString().take(8)}"
+        val emptySession = ChatSession(sessionId = placeholderId, displayName = "新会话")
+        _sessions.value = _sessions.value + emptySession
+        sessionMessages[placeholderId] = mutableListOf()
+        runBlocking(Dispatchers.IO) {
+            try {
+                dao.insertSession(emptySession)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save new session", e)
+            }
+        }
+        currentSessionId = placeholderId
         _messages.value = emptyList()
     }
 
@@ -226,6 +377,13 @@ class ChatRepository(
         _sessions.value = _sessions.value.map {
             if (it.sessionId == sessionId) it.copy(displayName = newName) else it
         }
+        runBlocking(Dispatchers.IO) {
+            try {
+                dao.renameSession(sessionId, newName)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to rename session in database", e)
+            }
+        }
     }
 
     fun deleteSession(sessionId: String) {
@@ -235,6 +393,14 @@ class ChatRepository(
         if (currentSessionId == sessionId) {
             currentSessionId = null
             _messages.value = emptyList()
+        }
+        runBlocking(Dispatchers.IO) {
+            try {
+                dao.deleteMessagesForSession(sessionId)
+                dao.deleteSession(sessionId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to delete session from database", e)
+            }
         }
     }
 

@@ -96,13 +96,13 @@ class AstrBotWsClient(
     }
 
     fun sendMessage(
-        text: String,
+        message: Any,
         username: String,
         sessionId: String? = null,
         messageId: String = UUID.randomUUID().toString(),
     ) {
         val msg = WsOutgoingMessage(
-            message = text,
+            message = message,
             username = username,
             session_id = sessionId,
             message_id = messageId,
