@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,11 +41,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -67,15 +65,20 @@ fun ChatScreen(
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     val navBarDp = scaffoldPadding.calculateBottomPadding()
+    val density = LocalDensity.current
     val view = LocalView.current
-    var isImeVisible by remember { mutableStateOf(false) }
+    var baselinePx by remember { mutableStateOf(0) }
+    var bottomDp by remember { mutableStateOf(navBarDp) }
 
     DisposableEffect(view) {
         val listener = ViewTreeObserver.OnGlobalLayoutListener {
             val rect = Rect()
             view.getWindowVisibleDisplayFrame(rect)
             val spaceBelow = view.rootView.height - rect.bottom
-            isImeVisible = spaceBelow > 200
+            if (baselinePx == 0) baselinePx = spaceBelow
+            val keyboardPx = (spaceBelow - baselinePx).coerceAtLeast(0)
+            val navBarPx = with(density) { navBarDp.toPx() }.toInt()
+            bottomDp = with(density) { maxOf(keyboardPx, navBarPx).toDp() }
         }
         view.viewTreeObserver.addOnGlobalLayoutListener(listener)
         onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
@@ -92,9 +95,7 @@ fun ChatScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .imePadding()
-            .padding(bottom = navBarDp)
-            .let { if (isImeVisible) it.offset(y = navBarDp) else it }
+            .padding(bottom = bottomDp)
     ) {
         TopAppBar(
             title = {
