@@ -1,7 +1,5 @@
 package com.rainnya.chat.ui.chat
 
-import android.graphics.Rect
-import android.view.ViewTreeObserver
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -14,11 +12,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -38,18 +34,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -58,7 +49,7 @@ import com.rainnya.chat.data.repository.ConnectionState
 import com.rainnya.chat.ui.components.ChatInputBar
 import com.rainnya.chat.ui.components.MessageBubble
 import com.rainnya.chat.ui.theme.RainnyaTheme
-import kotlin.math.max
+import com.rainnya.chat.ui.util.rememberImeHeightPx
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,31 +61,8 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val navBarDp = scaffoldPadding.calculateBottomPadding()
     val density = LocalDensity.current
-    val view = LocalView.current
 
-    // Approach 1: WindowInsets.ime (native on API 30+, via AndroidX compat below)
-    val imeFromInsets = WindowInsets.ime.getBottom(density)
-
-    // Approach 2: ViewTreeObserver (works on API < 30 where getWindowVisibleDisplayFrame reflects keyboard)
-    var imeFromLayout by remember { mutableIntStateOf(0) }
-    var baselinePx by remember { mutableIntStateOf(-1) }
-
-    DisposableEffect(view) {
-        val listener = ViewTreeObserver.OnGlobalLayoutListener {
-            val rect = Rect()
-            view.getWindowVisibleDisplayFrame(rect)
-            val spaceBelow = view.rootView.height - rect.bottom
-            if (baselinePx < 0) baselinePx = spaceBelow
-            val keyboard = (spaceBelow - baselinePx).coerceAtLeast(0)
-            imeFromLayout = keyboard
-            if (keyboard == 0) baselinePx = spaceBelow
-        }
-        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
-        onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
-    }
-
-    // Pick whichever reports a keyboard — at least one works on any API level
-    val imeHeightPx = max(imeFromInsets, imeFromLayout)
+    val imeHeightPx = rememberImeHeightPx()
     val bottomDp = if (imeHeightPx > 0) {
         with(density) { imeHeightPx.toDp() }
     } else {
