@@ -75,10 +75,6 @@ fun AppNavigation(settings: AppSettings) {
                     chatViewModel.switchSession(sessionId)
                     selectedIndex = 0
                 },
-                onNewSession = {
-                    chatViewModel.newSession()
-                    selectedIndex = 0
-                },
                 modifier = Modifier.padding(padding),
             )
             2 -> SettingsScreen(

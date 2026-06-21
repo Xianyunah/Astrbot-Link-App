@@ -1,5 +1,6 @@
 package com.rainnya.chat.data.websocket
 
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.rainnya.chat.data.model.WsIncomingMessage
@@ -17,6 +18,8 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+
+private const val TAG = "RainnyaWS"
 
 sealed class WsEvent {
     data class MessageReceived(val msg: WsIncomingMessage) : WsEvent()
@@ -39,12 +42,14 @@ class AstrBotWsClient(
     val events: Flow<WsEvent> = _events.receiveAsFlow()
 
     fun connect(wsUrl: String, apiKey: String) {
+        Log.d(TAG, "Connecting to $wsUrl")
         val request = Request.Builder()
             .url("$wsUrl?api_key=$apiKey")
             .build()
 
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                Log.d(TAG, "WebSocket opened")
                 scope.launch { _events.send(WsEvent.Connected(null)) }
             }
 
@@ -52,31 +57,46 @@ class AstrBotWsClient(
                 try {
                     val json = gson.fromJson(text, JsonObject::class.java)
                     val type = json.get("type")?.asString ?: ""
+                    Log.d(TAG, "WS receive type=$type data=${text.take(200)}")
 
                     if (type == "pong") return
 
+                    val dataRaw = json.get("data")
+                    val dataStr = when {
+                        dataRaw?.isJsonNull == true -> null
+                        dataRaw?.isJsonPrimitive == true -> dataRaw.asString
+                        dataRaw?.isJsonArray == true -> dataRaw.toString()
+                        dataRaw?.isJsonObject == true -> dataRaw.toString()
+                        else -> null
+                    }
+
                     val msg = WsIncomingMessage(
                         type = type,
-                        data = json.get("data")?.asString ?: json.get("data")?.toString(),
+                        data = dataStr,
                         session_id = json.get("session_id")?.asString,
                         message_id = json.get("message_id")?.asString,
                         streaming = json.get("streaming")?.asBoolean,
                         code = json.get("code")?.asString,
                     )
                     scope.launch { _events.send(WsEvent.MessageReceived(msg)) }
-                } catch (_: Exception) { }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to parse WS message: ${e.message}\n$text", e)
+                }
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                Log.d(TAG, "WebSocket closing: $code $reason")
                 webSocket.close(1000, null)
                 scope.launch { _events.send(WsEvent.Disconnected(reason)) }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                Log.d(TAG, "WebSocket closed: $code $reason")
                 scope.launch { _events.send(WsEvent.Disconnected(reason)) }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                Log.e(TAG, "WebSocket failure: ${t.message}", t)
                 scope.launch { _events.send(WsEvent.Error(t.message ?: "Unknown error")) }
             }
         })
@@ -94,14 +114,13 @@ class AstrBotWsClient(
             session_id = sessionId,
             message_id = messageId,
         )
-        webSocket?.send(gson.toJson(msg))
-    }
-
-    fun sendPing() {
-        webSocket?.send(gson.toJson(mapOf("t" to "ping")))
+        val json = gson.toJson(msg)
+        Log.d(TAG, "WS send: $json")
+        webSocket?.send(json)
     }
 
     fun disconnect() {
+        Log.d(TAG, "Disconnecting WebSocket")
         webSocket?.close(1000, "Client closing")
         webSocket = null
     }

@@ -7,18 +7,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -33,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.rainnya.chat.data.model.ChatSession
 import com.rainnya.chat.data.repository.ChatRepository
 import com.rainnya.chat.data.settings.AppSettings
 import com.rainnya.chat.ui.theme.RainnyaTheme
@@ -43,27 +40,20 @@ import com.rainnya.chat.ui.theme.RainnyaTheme
 fun SessionsScreen(
     repository: ChatRepository,
     onSessionClick: (String) -> Unit,
-    onNewSession: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val sessions by repository.sessions.collectAsState()
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+    ) {
         TopAppBar(
             title = { Text("会话") },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.surface,
             ),
-            actions = {
-                FilledTonalButton(
-                    onClick = onNewSession,
-                    modifier = Modifier.padding(end = 8.dp),
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("新会话")
-                }
-            },
         )
 
         if (sessions.isEmpty()) {
@@ -136,7 +126,6 @@ fun SessionsScreenPreview() {
         SessionsScreen(
             repository = ChatRepository(AppSettings(androidx.compose.ui.platform.LocalContext.current)),
             onSessionClick = {},
-            onNewSession = {},
         )
     }
 }

@@ -7,10 +7,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -33,8 +33,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.rainnya.chat.data.model.ChatMessage
-import com.rainnya.chat.data.model.MessageRole
 import com.rainnya.chat.data.repository.ConnectionState
 import com.rainnya.chat.ui.components.ChatInputBar
 import com.rainnya.chat.ui.components.MessageBubble
@@ -55,7 +53,12 @@ fun ChatScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize().imePadding()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .imePadding()
+    ) {
         TopAppBar(
             title = { Text("Rainnya") },
             colors = TopAppBarDefaults.topAppBarColors(

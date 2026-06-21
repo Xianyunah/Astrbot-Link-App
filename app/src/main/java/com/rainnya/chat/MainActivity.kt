@@ -10,8 +10,8 @@ import com.rainnya.chat.ui.theme.RainnyaTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        super.onCreate(savedInstanceState)
         val settings = AppSettings(applicationContext)
         setContent {
             RainnyaTheme {

@@ -1,5 +1,6 @@
 package com.rainnya.chat.data.repository
 
+import android.util.Log
 import com.google.gson.Gson
 import com.rainnya.chat.data.model.ChatMessage
 import com.rainnya.chat.data.model.MessageRole
@@ -16,6 +17,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+
+private const val TAG = "RainnyaRepo"
 
 class ChatRepository(
     private val settings: AppSettings,
@@ -40,19 +43,28 @@ class ChatRepository(
     val wsEvents: Flow<WsEvent> = wsClient.events
 
     fun connect() {
-        if (!settings.isConfigured) return
+        if (!settings.isConfigured) {
+            Log.w(TAG, "Cannot connect: settings not configured")
+            return
+        }
+        Log.d(TAG, "Connecting...")
         _connectionState.value = ConnectionState.CONNECTING
         wsClient.connect(settings.wsUrl, settings.apiKey)
     }
 
     fun disconnect() {
+        Log.d(TAG, "Disconnecting...")
         wsClient.disconnect()
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 
     fun sendMessage(text: String) {
-        if (_connectionState.value != ConnectionState.CONNECTED) return
+        if (_connectionState.value != ConnectionState.CONNECTED) {
+            Log.w(TAG, "Cannot send: not connected")
+            return
+        }
         val messageId = UUID.randomUUID().toString()
+        Log.d(TAG, "Sending message id=$messageId text=$text")
 
         val userMsg = ChatMessage(
             id = messageId,
@@ -71,90 +83,106 @@ class ChatRepository(
     }
 
     fun handleWsEvent(event: WsEvent) {
-        when (event) {
-            is WsEvent.Connected -> {
-                _connectionState.value = ConnectionState.CONNECTED
+        try {
+            when (event) {
+                is WsEvent.Connected -> {
+                    Log.d(TAG, "Event: Connected")
+                    _connectionState.value = ConnectionState.CONNECTED
+                }
+                is WsEvent.Disconnected -> {
+                    Log.d(TAG, "Event: Disconnected")
+                    _connectionState.value = ConnectionState.DISCONNECTED
+                }
+                is WsEvent.Error -> {
+                    Log.e(TAG, "Event: Error ${event.error}")
+                    _connectionState.value = ConnectionState.ERROR
+                }
+                is WsEvent.MessageReceived -> handleMessage(event)
             }
-            is WsEvent.Disconnected -> {
-                _connectionState.value = ConnectionState.DISCONNECTED
-            }
-            is WsEvent.Error -> {
-                _connectionState.value = ConnectionState.ERROR
-            }
-            is WsEvent.MessageReceived -> handleMessage(event)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling WS event: ${e.message}", e)
         }
     }
 
     private fun handleMessage(event: WsEvent.MessageReceived) {
-        val msg = event.msg
-        when (msg.type) {
-            "session_id" -> {
-                msg.session_id?.let { sid ->
-                    currentSessionId = sid
-                    val existing = _sessions.value.any { it.sessionId == sid }
-                    if (!existing) {
-                        _sessions.value = _sessions.value + ChatSession(
-                            sessionId = sid,
-                            displayName = "会话 ${_sessions.value.size + 1}",
-                        )
+        try {
+            val msg = event.msg
+            Log.d(TAG, "Handle message type=${msg.type} streaming=${msg.streaming}")
+
+            when (msg.type) {
+                "session_id" -> {
+                    msg.session_id?.let { sid ->
+                        currentSessionId = sid
+                        val existing = _sessions.value.any { it.sessionId == sid }
+                        if (!existing) {
+                            _sessions.value = _sessions.value + ChatSession(
+                                sessionId = sid,
+                                displayName = "会话 ${_sessions.value.size + 1}",
+                            )
+                        }
                     }
                 }
-            }
-            "plain" -> {
-                val text = msg.data?.toString() ?: ""
-                if (text.isEmpty()) return
-                val isStreaming = msg.streaming ?: true
-                val messages = _messages.value
-                val lastAssistant = messages.indexOfLast { it.role == MessageRole.ASSISTANT }
+                "plain" -> {
+                    val text = msg.data?.toString() ?: ""
+                    if (text.isEmpty()) return
+                    val isStreaming = msg.streaming ?: true
+                    val currentList = _messages.value.toMutableList()
+                    val lastAssistant = currentList.indexOfLast { it.role == MessageRole.ASSISTANT }
 
-                if (isStreaming && lastAssistant >= 0 && messages[lastAssistant].streaming) {
-                    val updated = messages.toMutableList()
-                    updated[lastAssistant] = updated[lastAssistant].copy(
-                        content = updated[lastAssistant].content + text
-                    )
-                    _messages.value = updated
-                } else {
-                    _messages.value = messages + ChatMessage(
-                        id = msg.message_id ?: UUID.randomUUID().toString(),
-                        content = text,
-                        role = MessageRole.ASSISTANT,
+                    if (isStreaming && lastAssistant >= 0 && currentList[lastAssistant].streaming) {
+                        currentList[lastAssistant] = currentList[lastAssistant].copy(
+                            content = currentList[lastAssistant].content + text
+                        )
+                        _messages.value = currentList
+                    } else {
+                        currentList.add(
+                            ChatMessage(
+                                id = msg.message_id ?: UUID.randomUUID().toString(),
+                                content = text,
+                                role = MessageRole.ASSISTANT,
+                                sessionId = currentSessionId ?: "",
+                                streaming = isStreaming,
+                            )
+                        )
+                        _messages.value = currentList
+                    }
+                }
+                "end" -> {
+                    val currentList = _messages.value.toMutableList()
+                    val lastAssistant = currentList.indexOfLast { it.role == MessageRole.ASSISTANT }
+                    if (lastAssistant >= 0) {
+                        currentList[lastAssistant] = currentList[lastAssistant].copy(streaming = false)
+                        _messages.value = currentList
+                    }
+                }
+                "error" -> {
+                    val errText = msg.data?.toString() ?: msg.code ?: "Unknown error"
+                    Log.e(TAG, "Server error: $errText")
+                    _messages.value = _messages.value + ChatMessage(
+                        id = UUID.randomUUID().toString(),
+                        content = "Error: $errText",
+                        role = MessageRole.SYSTEM,
                         sessionId = currentSessionId ?: "",
-                        streaming = isStreaming,
                     )
                 }
+                "message_saved" -> Log.d(TAG, "Message saved: ${msg.data}")
+                "agent_stats" -> Log.d(TAG, "Agent stats: ${msg.data}")
+                else -> Log.d(TAG, "Unhandled message type: ${msg.type}")
             }
-            "end" -> {
-                val messages = _messages.value
-                val lastAssistant = messages.indexOfLast { it.role == MessageRole.ASSISTANT }
-                if (lastAssistant >= 0) {
-                    val updated = messages.toMutableList()
-                    updated[lastAssistant] = updated[lastAssistant].copy(streaming = false)
-                    _messages.value = updated
-                }
-            }
-            "error" -> {
-                val errText = msg.data?.toString() ?: msg.code ?: "Unknown error"
-                _messages.value = _messages.value + ChatMessage(
-                    id = UUID.randomUUID().toString(),
-                    content = "Error: $errText",
-                    role = MessageRole.SYSTEM,
-                    sessionId = currentSessionId ?: "",
-                )
-            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error processing message: ${e.message}", e)
         }
     }
 
     fun switchSession(sessionId: String) {
+        Log.d(TAG, "Switch to session $sessionId")
         currentSessionId = sessionId
         _messages.value = emptyList()
     }
 
     fun newSession() {
+        Log.d(TAG, "New session")
         currentSessionId = null
-        _messages.value = emptyList()
-    }
-
-    fun clearMessages() {
         _messages.value = emptyList()
     }
 
