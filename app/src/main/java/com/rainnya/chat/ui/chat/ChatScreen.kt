@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -56,6 +58,7 @@ import com.rainnya.chat.data.repository.ConnectionState
 import com.rainnya.chat.ui.components.ChatInputBar
 import com.rainnya.chat.ui.components.MessageBubble
 import com.rainnya.chat.ui.theme.RainnyaTheme
+import kotlin.math.max
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,7 +72,11 @@ fun ChatScreen(
     val density = LocalDensity.current
     val view = LocalView.current
 
-    var imeHeightPx by remember { mutableIntStateOf(0) }
+    // Approach 1: WindowInsets.ime (native on API 30+, via AndroidX compat below)
+    val imeFromInsets = WindowInsets.ime.getBottom(density)
+
+    // Approach 2: ViewTreeObserver (works on API < 30 where getWindowVisibleDisplayFrame reflects keyboard)
+    var imeFromLayout by remember { mutableIntStateOf(0) }
     var baselinePx by remember { mutableIntStateOf(-1) }
 
     DisposableEffect(view) {
@@ -77,19 +84,17 @@ fun ChatScreen(
             val rect = Rect()
             view.getWindowVisibleDisplayFrame(rect)
             val spaceBelow = view.rootView.height - rect.bottom
-            if (baselinePx < 0) {
-                baselinePx = spaceBelow
-            }
+            if (baselinePx < 0) baselinePx = spaceBelow
             val keyboard = (spaceBelow - baselinePx).coerceAtLeast(0)
-            imeHeightPx = keyboard
-            if (keyboard == 0) {
-                baselinePx = spaceBelow
-            }
+            imeFromLayout = keyboard
+            if (keyboard == 0) baselinePx = spaceBelow
         }
         view.viewTreeObserver.addOnGlobalLayoutListener(listener)
         onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
     }
 
+    // Pick whichever reports a keyboard — at least one works on any API level
+    val imeHeightPx = max(imeFromInsets, imeFromLayout)
     val bottomDp = if (imeHeightPx > 0) {
         with(density) { imeHeightPx.toDp() }
     } else {
