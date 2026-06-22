@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 import com.rainnya.chat.data.model.ChatMessage
 import com.rainnya.chat.data.model.ChatSession
 
-@Database(entities = [ChatSession::class, ChatMessage::class], version = 1, exportSchema = false)
+@Database(entities = [ChatSession::class, ChatMessage::class], version = 2, exportSchema = false)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun chatDao(): ChatDao
@@ -19,11 +19,11 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: Room.databaseBuilder(
+                INSTANCE ?:                 Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "rainnya_db"
-                ).build().also { INSTANCE = it }
+                ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
             }
         }
     }

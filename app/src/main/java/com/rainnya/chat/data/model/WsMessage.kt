@@ -16,4 +16,15 @@ data class WsIncomingMessage(
     val message_id: String? = null,
     val streaming: Boolean? = null,
     val code: String? = null,
+    val attachment_id: String? = null,
+    val url: String? = null,
+)
+
+data class WsMessageSegment(
+    val type: String,
+    val text: String? = null,
+    val attachment_id: String? = null,
+    val url: String? = null,
+    val filename: String? = null,
+    val mime_type: String? = null,
 )

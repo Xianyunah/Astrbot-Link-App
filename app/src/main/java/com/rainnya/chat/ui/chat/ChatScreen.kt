@@ -1,10 +1,16 @@
 package com.rainnya.chat.ui.chat
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -53,6 +59,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -86,6 +93,7 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val navBarDp = scaffoldPadding.calculateBottomPadding()
     val density = LocalDensity.current
     val imeHeightPx = rememberImeHeightPx()
@@ -131,6 +139,11 @@ fun ChatScreen(
             }
         }
     }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+        onResult = { uri: Uri? -> uri?.let { viewModel.addImage(it) } }
+    )
 
     Column(
         modifier = Modifier.fillMaxSize().padding(bottom = bottomDp),
@@ -196,6 +209,7 @@ fun ChatScreen(
                         MessageBubble(
                             message = message,
                             onCopy = { text ->
+                                copyToClipboard(context, text)
                                 scope.launch {
                                     snackbar.showSnackbar(
                                         message = "已复制",
@@ -222,10 +236,24 @@ fun ChatScreen(
             text = state.inputText,
             onTextChange = viewModel::updateInputText,
             onSend = { viewModel.sendMessage(state.inputText) },
+            onPickImage = {
+                imagePickerLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                )
+            },
+            pendingImageUri = state.pendingImageUri,
+            onRemoveImage = viewModel::removeImage,
+            uploading = state.uploading,
+            uploadProgress = state.uploadProgress,
             connectionState = state.connectionState,
             isStreaming = state.isStreaming,
         )
     }
+}
+
+private fun copyToClipboard(context: Context, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("Rainnya", text))
 }
 
 @Composable

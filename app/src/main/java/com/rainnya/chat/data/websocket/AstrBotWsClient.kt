@@ -76,6 +76,8 @@ class AstrBotWsClient(
                         message_id = json.get("message_id")?.asString,
                         streaming = json.get("streaming")?.asBoolean,
                         code = json.get("code")?.asString,
+                        attachment_id = json.get("attachment_id")?.asString,
+                        url = json.get("url")?.asString,
                     )
                     scope.launch { _events.send(WsEvent.MessageReceived(msg)) }
                 } catch (e: Exception) {

@@ -11,6 +11,8 @@ data class ChatMessage(
     val timestamp: Long = System.currentTimeMillis(),
     val sessionId: String = "",
     val streaming: Boolean = false,
+    val attachmentId: String? = null,
+    val imageUrl: String? = null,
 )
 
 enum class MessageRole { USER, ASSISTANT, SYSTEM }

@@ -1,6 +1,7 @@
 package com.rainnya.chat.ui.chat
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -18,6 +19,9 @@ data class ChatUiState(
     val messages: List<com.rainnya.chat.data.model.ChatMessage> = emptyList(),
     val connectionState: ConnectionState = ConnectionState.DISCONNECTED,
     val inputText: String = "",
+    val pendingImageUri: Uri? = null,
+    val uploading: Boolean = false,
+    val uploadProgress: Float = 0f,
 ) {
     val isStreaming: Boolean
         get() = messages.any { it.streaming }
@@ -42,6 +46,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), L
             }
         }
         viewModelScope.launch {
+            repository.uploading.collect { uploading ->
+                _uiState.value = _uiState.value.copy(uploading = uploading)
+            }
+        }
+        viewModelScope.launch {
+            repository.uploadProgress.collect { progress ->
+                _uiState.value = _uiState.value.copy(uploadProgress = progress)
+            }
+        }
+        viewModelScope.launch {
             repository.wsEvents.collect { event ->
                 repository.handleWsEvent(event)
             }
@@ -61,13 +75,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application), L
     }
 
     fun sendMessage(text: String) {
-        if (text.isBlank()) return
-        repository.sendMessage(text.trim())
-        _uiState.value = _uiState.value.copy(inputText = "")
+        if (text.isBlank() && _uiState.value.pendingImageUri == null) return
+        val imageUri = _uiState.value.pendingImageUri
+        if (imageUri != null) {
+            repository.sendMessageWithImage(text.trim(), imageUri)
+            _uiState.value = _uiState.value.copy(inputText = "", pendingImageUri = null)
+        } else {
+            repository.sendMessage(text.trim())
+            _uiState.value = _uiState.value.copy(inputText = "")
+        }
     }
 
     fun updateInputText(text: String) {
         _uiState.value = _uiState.value.copy(inputText = text)
+    }
+
+    fun addImage(uri: Uri) {
+        _uiState.value = _uiState.value.copy(pendingImageUri = uri)
+    }
+
+    fun removeImage() {
+        _uiState.value = _uiState.value.copy(pendingImageUri = null)
     }
 
     fun newSession() {

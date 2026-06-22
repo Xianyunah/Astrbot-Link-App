@@ -1,13 +1,16 @@
 package com.rainnya.chat.data.repository
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.google.gson.Gson
 import com.rainnya.chat.data.local.AppDatabase
 import com.rainnya.chat.data.model.ChatMessage
 import com.rainnya.chat.data.model.MessageRole
 import com.rainnya.chat.data.model.ChatSession
+import com.rainnya.chat.data.model.WsMessageSegment
 import com.rainnya.chat.data.settings.AppSettings
+import com.rainnya.chat.data.upload.ImageUploader
 import com.rainnya.chat.data.websocket.AstrBotWsClient
 import com.rainnya.chat.data.websocket.WsEvent
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +25,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 
@@ -33,6 +35,7 @@ class ChatRepository(
     private val context: Context,
     private val settings: AppSettings,
     private val wsClient: AstrBotWsClient = AstrBotWsClient(Gson()),
+    private val imageUploader: ImageUploader = ImageUploader(),
 ) {
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
@@ -50,6 +53,12 @@ class ChatRepository(
 
     private val _connectionState = MutableStateFlow(ConnectionState.DISCONNECTED)
     val connectionState: StateFlow<ConnectionState> = _connectionState
+
+    private val _uploadProgress = MutableStateFlow(0f)
+    val uploadProgress: StateFlow<Float> = _uploadProgress
+
+    private val _uploading = MutableStateFlow(false)
+    val uploading: StateFlow<Boolean> = _uploading
 
     private var currentSessionId: String? = null
     private val sessionMessages = mutableMapOf<String, MutableList<ChatMessage>>()
@@ -103,7 +112,7 @@ class ChatRepository(
         _connectionState.value = ConnectionState.DISCONNECTED
     }
 
-    fun sendMessage(text: String) {
+    fun sendMessage(text: String, attachmentId: String? = null) {
         if (_connectionState.value != ConnectionState.CONNECTED) {
             Log.w(TAG, "Cannot send: not connected")
             return
@@ -112,14 +121,15 @@ class ChatRepository(
         val messageId = UUID.randomUUID().toString()
         Log.d(TAG, "Sending message id=$messageId text=$text")
 
-        val userMsg = ChatMessage(
+        val userMsgBuilder = ChatMessage(
             id = "user_$messageId",
             content = text,
             role = MessageRole.USER,
             sessionId = currentSessionId ?: "",
         )
+
         val list = _messages.value.toMutableList()
-        list.add(userMsg)
+        list.add(userMsgBuilder)
         list.add(
             ChatMessage(
                 id = "pending_$messageId",
@@ -133,12 +143,58 @@ class ChatRepository(
         saveCurrentMessages()
 
         val sendSessionId = if (currentSessionId?.startsWith("local_") == true) null else currentSessionId
+
+        val messagePayload: Any = if (attachmentId != null) {
+            val segments = mutableListOf<WsMessageSegment>()
+            if (text.isNotBlank()) {
+                segments.add(WsMessageSegment(type = "plain", text = text))
+            }
+            segments.add(WsMessageSegment(
+                type = "image",
+                attachment_id = attachmentId,
+                url = "${settings.httpBaseUrl}/api/v1/file?attachment_id=$attachmentId",
+            ))
+            segments
+        } else {
+            text
+        }
+
         wsClient.sendMessage(
-            message = text,
+            message = messagePayload,
             username = settings.taggedUsername,
             sessionId = sendSessionId,
             messageId = messageId,
         )
+    }
+
+    fun sendMessageWithImage(text: String, imageUri: Uri) {
+        if (_connectionState.value != ConnectionState.CONNECTED) {
+            Log.w(TAG, "Cannot send: not connected")
+            return
+        }
+        _uploading.value = true
+        _uploadProgress.value = 0f
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val attachmentId = imageUploader.upload(
+                    context = context,
+                    baseUrl = settings.httpBaseUrl,
+                    apiKey = settings.apiKey,
+                    uri = imageUri,
+                    onProgress = { progress ->
+                        _uploadProgress.value = progress
+                    },
+                )
+                _uploadProgress.value = 1f
+                _uploading.value = false
+                sendMessage(text = text, attachmentId = attachmentId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Image upload failed", e)
+                _uploading.value = false
+                _uploadProgress.value = 0f
+            }
+        }
     }
 
     fun handleWsEvent(event: WsEvent) {
@@ -243,6 +299,25 @@ class ChatRepository(
                         )
                         _messages.value = list
                     }
+                }
+                "image" -> {
+                    val list = _messages.value.toMutableList()
+                    val attachmentId = msg.attachment_id
+                    val imageUrl = msg.url
+
+                    list.add(
+                        ChatMessage(
+                            id = UUID.randomUUID().toString(),
+                            content = "",
+                            role = MessageRole.ASSISTANT,
+                            sessionId = currentSessionId ?: "",
+                            streaming = false,
+                            attachmentId = attachmentId,
+                            imageUrl = imageUrl,
+                        )
+                    )
+                    _messages.value = list
+                    saveCurrentMessages()
                 }
                 "end" -> {
                     streamTimeoutJob?.cancel()

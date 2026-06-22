@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -44,6 +45,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import com.rainnya.chat.data.model.ChatMessage
 import com.rainnya.chat.data.model.MessageRole
 import com.rainnya.chat.ui.theme.RainnyaTheme
@@ -111,6 +113,19 @@ fun MessageBubble(
                     )
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
+                if (message.imageUrl != null) {
+                    AsyncImage(
+                        model = message.imageUrl,
+                        contentDescription = "图片",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .heightIn(max = 240.dp),
+                        contentScale = ContentScale.FillWidth,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                }
+
                 BubbleContent(
                     message = message,
                     textColor = textColor,
@@ -157,17 +172,19 @@ private fun BubbleContent(
         message.content
     }
 
-    if (isStreaming) {
-        StreamingText(
-            fullContent = displayText,
-            textColor = textColor,
-            messageId = message.id,
-        )
-    } else {
-        MarkdownText(
-            text = displayText,
-            color = textColor,
-        )
+    if (displayText.isNotBlank()) {
+        if (isStreaming) {
+            StreamingText(
+                fullContent = displayText,
+                textColor = textColor,
+                messageId = message.id,
+            )
+        } else {
+            MarkdownText(
+                text = displayText,
+                color = textColor,
+            )
+        }
     }
 
     if (shouldCollapse) {
